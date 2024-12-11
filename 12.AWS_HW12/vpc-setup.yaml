@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Создание двух VPC с VPC Peering и EC2 в каждой для SSH-соединения по приватным IP
+
+Parameters:
+  KeyPairName:
+    Type: String
+    Description: Имя существующей пары ключей EC2 для доступа по SSH
+  LatestAmiId:
+    Type: String
+    Description: ID AMI для запуска экземпляров EC2 (например, Amazon Linux 2)
+
+Resources:
+  # Первый VPC
+  VPC1:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC1
+
+  # Подсеть в первом VPC
+  Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC1
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Subnet1
+
+  # Интернет-шлюз для первого VPC
+  InternetGateway1:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: IGW1
+
+  # Присоединение интернет-шлюза к первому VPC
+  VPCGatewayAttachment1:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC1
+      InternetGatewayId: !Ref InternetGateway1
+
+  # Таблица маршрутизации для первого VPC
+  RouteTable1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC1
+      Tags:
+        - Key: Name
+          Value: RouteTable1
+
+  # Ассоциация таблицы маршрутизации с подсетью первого VPC
+  SubnetRouteTableAssociation1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref RouteTable1
+
+  # Маршрут по умолчанию через интернет-шлюз для первого VPC
+  DefaultRoute1:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment1
+    Properties:
+      RouteTableId: !Ref RouteTable1
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway1
+
+  # Группа безопасности для первого VPC
+  SecurityGroup1:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security Group for VPC1
+      VpcId: !Ref VPC1
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '10.1.0.0/16'  # Разрешаем SSH-трафик из VPC2
+      Tags:
+        - Key: Name
+          Value: SG-VPC1
+
+  # Экземпляр EC2 в первом VPC
+  EC2Instance1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: 't2.micro'
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref Subnet1
+      ImageId: !Ref LatestAmiId
+      SecurityGroupIds:
+        - !Ref SecurityGroup1
+      Tags:
+        - Key: Name
+          Value: EC2Instance1
+
+  # Второй VPC
+  VPC2:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.1.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC2
+
+  # Подсеть во втором VPC
+  Subnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC2
+      CidrBlock: '10.1.1.0/24'
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Subnet2
+
+  # Интернет-шлюз для второго VPC
+  InternetGateway2:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: IGW2
+
+  # Присоединение интернет-шлюза ко второму VPC
+  VPCGatewayAttachment2:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC2
+      InternetGatewayId: !Ref InternetGateway2
+
+  # Таблица маршрутизации для второго VPC
+  RouteTable2:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC2
+      Tags:
+        - Key: Name
+          Value: RouteTable2
+
+  # Ассоциация таблицы маршрутизации с подсетью второго VPC
+  SubnetRouteTableAssociation2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref RouteTable2
+
+  # Маршрут по умолчанию через интернет-шлюз для второго VPC
+  DefaultRoute2:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment2
+    Properties:
+      RouteTableId: !Ref RouteTable2
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway2
+
+  # Группа безопасности для второго VPC
+  SecurityGroup2:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security Group for VPC2
+      VpcId: !Ref VPC2
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: '10.0.0.0/16'  # Разрешаем SSH-трафик из VPC1
+      Tags:
+        - Key: Name
+          Value: SG-VPC2
