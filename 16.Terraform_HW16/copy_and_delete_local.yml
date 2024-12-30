@@ -1,0 +1,13 @@
+- name: Copy and delete file
+  hosts: remote_servers
+  tasks:
+    - name: Copy file to remote server
+      copy:
+        src: /home/ivcpaladin/local_file.txt
+        dest: /tmp/remote_file.txt
+
+    - name: Delete file from local machine
+      delegate_to: localhost
+      file:
+        path: /home/ivcpaladin/local_file.txt
+        state: absent

@@ -1,0 +1,18 @@
+- name: Create a user with a home directory
+  hosts: remote_servers
+  become: true
+  tasks:
+    - name: Create a new user
+      user:
+        name: testuser
+        home: /home/testuser
+        shell: /bin/bash
+        state: present
+
+    - name: Verify user creation
+      command: id testuser
+      register: user_info
+
+    - name: Show user information
+      debug:
+        msg: "User created: {{ user_info.stdout }}"

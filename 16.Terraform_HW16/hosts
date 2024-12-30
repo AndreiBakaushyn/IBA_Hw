@@ -1,0 +1,2 @@
+[remote_servers]
+172.31.254.17 ansible_user=ivcpaladin
