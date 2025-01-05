@@ -1,0 +1,53 @@
+- name: Manage EC2 instance and Docker
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  vars:
+    aws_region: "us-east-1"
+    instance_type: "t3.micro"
+    ami_id: "ami-0e2c8caa4b6378d8c"
+    key_name: "devops"
+    ssh_private_key: "/home/ivcpaladin/.ssh/devops.pem"
+    instance_tag: "Ansible-Baksushyn"
+    ansible_user: ubuntu
+
+  tasks:
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        wait: yes
+        count: 1
+        tags:
+          Name: "{{ instance_tag }}"
+      register: ec2_instance
+
+    - name: Debug EC2 instance details
+      debug:
+        var: ec2_instance
+
+    - name: Save instance details as facts
+      set_fact:
+        instance_id: "{{ ec2_instance.changed_ids[0] | default(ec2_instance.instance_ids[0]) }}"
+        instance_ip: "{{ ec2_instance.instances[0].public_ip_address }}"
+        cacheable: true
+
+    - name: Wait for SSH to become available
+      wait_for:
+        host: "{{ instance_ip }}"
+        port: 22
+        timeout: 300
+      delegate_to: localhost
+
+    - name: Add instance to inventory
+      add_host:
+        name: "ec2_instance"
+        ansible_host: "{{ instance_ip }}"
+        ansible_user: "{{ ansible_user }}"
+        ansible_ssh_private_key_file: "{{ ssh_private_key }}"
+        ansible_connection: ssh
